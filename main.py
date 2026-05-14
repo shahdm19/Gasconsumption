@@ -3,24 +3,21 @@ import joblib
 import pandas as pd
 import gdown
 import os
+from pydantic import BaseModel
+from groq import Groq
 
 if not os.path.exists('city_model.pkl'):
-   gdown.download('https://drive.google.com/uc?id=1zkL48TzAL2WfkaO7FymEJ49ttgrGm8Tw', 'city_model.pkl', quiet=False)
+    gdown.download('https://drive.google.com/uc?id=1zkL48TzAL2WfkaO7FymEJ49ttgrGm8Tw', 'city_model.pkl', quiet=False)
 
 if not os.path.exists('highway_model.pkl'):
-   gdown.download('https://drive.google.com/uc?id=1Hb0i83uGj5MWsmpKhiueYalVp-0v-hw6', 'highway_model.pkl', quiet=False)
+    gdown.download('https://drive.google.com/uc?id=1Hb0i83uGj5MWsmpKhiueYalVp-0v-hw6', 'highway_model.pkl', quiet=False)
+
+if not os.path.exists('lookup_table.csv'):
+    gdown.download('https://drive.google.com/uc?id=YOUR_LOOKUP_TABLE_ID', 'lookup_table.csv', quiet=False)
 
 app = FastAPI()
 
-from pydantic import BaseModel
-
-class TripInput(BaseModel):
-    make: str
-    model: str
-    road_type: str
-    temperature: float
-    ac_on: bool
-
+client = Groq(api_key="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")
 
 city_model = joblib.load('city_model.pkl')
 highway_model = joblib.load('highway_model.pkl')
@@ -37,6 +34,13 @@ lookup_table['Drive'] = lookup_table['Drive'].replace({
     '2-Wheel Drive': 'FWD'
 })
 
+class TripInput(BaseModel):
+    make: str
+    model: str
+    road_type: str
+    temperature: float
+    ac_on: bool
+
 def adjust_consumption(mpg, temperature, ac_on):
     liters = 235.21 / mpg
     if ac_on:
@@ -52,10 +56,9 @@ def predict_consumption(make, model, road_type, temperature, ac_on):
                        (lookup_table['Model'] == model)]
 
     if car.empty:
-        return 'Car not found'
+        return None
 
     car_age = 2026 - car['Year'].values[0]
-
     drive = car['Drive'].values[0]
     drive_4wd = 1 if drive == '4WD' else 0
     drive_rwd = 1 if drive == 'RWD' else 0
@@ -84,8 +87,37 @@ def predict_consumption(make, model, road_type, temperature, ac_on):
 
     return adjust_consumption(mpg, temperature, ac_on)
 
+def get_recommendations(make, model, road_type, temperature, ac_on, consumption):
+    prompt = f"""
+    Car: {make} {model}
+    Road type: {road_type}
+    Temperature: {temperature}°C
+    AC: {"On" if ac_on else "Off"}
+    Fuel consumption rate: {consumption} L/100km
+    
+    Provide 4 short and practical tips to reduce fuel consumption, improve driving efficiency, and maintain safety.
+    """
+    
+    message = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        max_tokens=500,
+        messages=[{"role": "user", "content": prompt}]
+    )
+    
+    return message.choices[0].message.content
+
 @app.post("/predict")
 def predict(trip: TripInput):
-    result = predict_consumption(trip.make, trip.model, 
-                                 trip.road_type, trip.temperature, trip.ac_on)
-    return {"consumption_rate": result}
+    consumption = predict_consumption(trip.make, trip.model,
+                                      trip.road_type, trip.temperature, trip.ac_on)
+    
+    if consumption is None:
+        return {"error": "Car not found"}
+    
+    recommendations = get_recommendations(trip.make, trip.model, trip.road_type,
+                                          trip.temperature, trip.ac_on, consumption)
+    
+    return {
+        "consumption_rate": consumption,
+        "recommendations": recommendations
+    }
