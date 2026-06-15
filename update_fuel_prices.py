@@ -11,12 +11,12 @@ load_dotenv()
 
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-if not GROQ_API_KEY:
-    logging.error("GROQ_API_KEY not found in .env file")
+FUEL_PRICES_API_KEY = os.getenv("FUEL_PRICES_API_KEY")
+if not FUEL_PRICES_API_KEY:
+    logging.error("API_KEY not found in .env file")
     exit()
 
-client = Groq(api_key=GROQ_API_KEY)
+client = Groq(api_key=FUEL_PRICES_API_KEY)
 
 def search_and_extract(query: str, prompt: str) -> dict:
     """Searching DuckDuckGo and extracting fuel prices using LLM"""
