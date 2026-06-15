@@ -30,7 +30,7 @@ jobs:
 
       - name: Run Update Script
         env:
-          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          FUEL_PRICES_API_KEY:${{ secrets.FUEL_PRICES_KEY }}
         run: python update_fuel_prices.py
 
       - name: Commit and Push if changed
